@@ -1,9 +1,10 @@
 #!/bin/bash
-
-##
+#
 # ooengine - Object oriented bash engine
 #
 # AUTHOR:   Patrick Drotleff <patrick.d@ventral.org>
+#           Jan Chren (rindeal)
+# LICENCE:  GNU General Public License Version 2
 # USAGE:    source ./ooengine
 #           See ./examples/ for further documentation.
 
