@@ -4,11 +4,11 @@ source ../ooengine || exit 1
 
 # Example 7: Magic globals, funky stuff.
 
-class::someParentClass() {
+@class::someParentClass() {
   :
 }
 
-class::someClass::extends::someParentClass() {
+@class::someClass::extends::someParentClass() {
 
   private test1
   private test2
@@ -16,22 +16,22 @@ class::someClass::extends::someParentClass() {
   public test4
   public test5
 
-  method::getClassName() {
+  @method::getClassName() {
     # The $__CLASS global contains the name of the objects class.
     echo "Class name: $__CLASS"
   }
 
-  method::getBaseName() {
+  @method::getBaseName() {
     # The $__BASE global contains the objects class parent name.
     echo "Parent name: $__BASE"
   }
 
-  method::getObjectId() {
+  @method::getObjectId() {
     # The $__OBJECT global contains the unique object ID.
     echo "Object ID: $__OBJECT"
   }
 
-  method::listAttributes() {
+  @method::listAttributes() {
     # The global $__ATTRIBUTES array contains the objects attibutes.
     local attribute
     local attribute_info
@@ -44,7 +44,7 @@ class::someClass::extends::someParentClass() {
   }
 }
 
-someObject=$(new someClass)
+someObject=$(@new someClass)
 
 $someObject getClassName
 

@@ -4,47 +4,47 @@ source ../ooengine || exit 1
 
 # Example 8: Overriding default Class methods.
 
-class::OverrideAllTheThingsClass() {
+@class::OverrideAllTheThingsClass() {
 
   ##
   # Overrides standard attribute getter.
-  method::get() {
-    # ... do something before ...
-    
-    # Call the standard get method. 
+  @method::get() {
+    echo ... do something before ...
+
+    # Call the standard get method.
     $parent get "$@"
 
-    # ... or afterwards ...
+    echo ... or afterwards ...
   }
 
   ##
   # Overrides standard attribute setter.
-  method::set() {
-    # ... do something before ...
+  @method::set() {
+    echo ... do something before ...
 
-    # Call the standard set method. 
+    # Call the standard set method.
     $parent set "$@"
 
-    # ... or afterwards ...
+    echo ... or afterwards ...
   }
 
   ##
   # Overrides default toString method.
-  method::toString() {
-    # ... do something before ...
-    
-    # You may call the standard toString method. 
+  @method::toString() {
+    echo ... do something before ...
+
+    # You may call the standard toString method.
     $parent toString
 
-    # ... or afterwards ...
+    echo ... or afterwards ...
   }
 
   ##
   # Overrides default destructor.
-  method::destruct() {
-    # ... do something before ...
+  @method::destruct() {
+    echo ... do something before ...
 
-    # Call the standard destruct method. 
+    # Call the standard destruct method.
     $parent destruct
 
     # ... or - no wait, don't do something
@@ -53,13 +53,13 @@ class::OverrideAllTheThingsClass() {
 
   ##
   # Overrides standard clone method.
-  method::clone() {
-    # ... do something before ...
+  @method::clone() {
+    echo ... do something before ...
 
-    # Call the standard clone method. 
+    # Call the standard clone method.
     $parent clone $@
 
-    # ... or afterwards ...
+    echo ... or afterwards ...
   }
 
 }

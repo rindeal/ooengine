@@ -5,46 +5,46 @@ source ../ooengine || exit 1
 # Example 3: Class decoration, for injecting methods and attributes.
 
 # 'Animal' base class.
-class::Animal() {
+@class::Animal() {
   # All animals should be able to eat.
-  method::eat() {
+  @method::eat() {
     echo "nom nom nom.."
   }
 }
 
 # 'AnimalMovement' class, decorates 'Animal'.
-class::AnimalMovement::decorates::Animal() {
+@class::AnimalMovement@decorates::Animal() {
   # All animals should be able to move.
-  method::move() {
+  @method::move() {
     echo "moving.."
   }
 }
 
 # 'Dog' class, extends 'Animal'.
-class::Dog::extends::Animal() {
+@class::Dog@extends::Animal() {
   # Only dogs are able to bark.
-  method::bark() {
+  @method::bark() {
     echo "Woof woof"
   }
 }
 
 # 'DogSnarling' class, decorates 'Dog'.
-class::DogSnarling::decorates::Dog() {
+@class::DogSnarling@decorates::Dog() {
   # Dogs should be able to snarl.
-  method::snarl() {
+  @method::snarl() {
     echo "grrrrrrr"
   }
 }
 
 # Create an animal.
-someAnimal=$(new Animal)
+someAnimal=$(@new Animal)
 # An animal is able to eat.
 $someAnimal eat
 # By decoration, animals are also able to move.
 $someAnimal move
 
 # Create a dog.
-someDog=$(new Dog)
+someDog=$(@new Dog)
 # Dogs are also able to eat as they inherit it from animals.
 $someDog eat
 # But dogs are additionally able to bark.

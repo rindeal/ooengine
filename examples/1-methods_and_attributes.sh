@@ -5,39 +5,39 @@ source ../ooengine || exit 1
 # Example 1: Simple methods and attributes.
 
 # A simple base class named 'TestClass'.
-class::TestClass() {
+@class::TestClass() {
 
   # Public attribute, 'get' and 'set'-able.
-  public attributePublic "optional default value"
+  @public attributePublic "optional default value"
 
   # Private attribute, only internal 'get' and 'set'-able.
-  private attributePrivate "optional default value"
+  @private attributePrivate "optional default value"
 
   # Public method, reachable with any reference.
-  method::publicTestMethod() {
+  @method::publicTestMethod() {
     echo "Do something here."
     # Call private method.
-    $this internalTestMethod
+    $this internalTestMethod 1="hello world" 2:=var
   }
 
   # Public getter method for private attribute 'attributePrivate'.
-  method::getAttributePrivate() {
+  @method::getAttributePrivate() {
     $this get attributePrivate
   }
 
   # Public setter method for private attribute 'attributePrivate'.
-  method::setAttributePrivate() {
+  @method::setAttributePrivate() {
     $this set attributePrivate "$1"
   }
 
   # Private method, only internal reachable with $this reference.
-  __method::internalTestMethod() {
+  @__method::internalTestMethod() {
     echo "Or do something here."
   }
 }
 
 # Create an object of the class.
-testObject=$(new TestClass)
+testObject=$(@new TestClass)
 
 
 # Call a method.
@@ -50,6 +50,7 @@ echo $value
 
 # Set a public attribute.
 $testObject set attributePublic "New value"
+$testObject get attributePublic
 
 
 # Get a private attribute.
