@@ -30,15 +30,15 @@
 ##
 # Returns the current call stack.
 @__call_stack() {
-  declare -i frames=${#BASH_LINENO[@]}
+  declare -r -i frames=${#BASH_LINENO[@]}
   declare -i frame=$(( frames - 2 ))
 
-  for (( ; frame >= 0; frame-- )); do
-    local base_source="${BASH_SOURCE[frame+1]}"
-    if [[ $(basename "${base_source}") != "ooengine" ]] ; then
+  for (( ; frame >= 0 ; frame-- )) ; do
+    #local base_source="${BASH_SOURCE[frame+1]}"
+    #if [[ $(basename "${base_source}") != "ooengine" ]] ; then
       printf "  %-30s (%-30s :%3d)\n" \
         "${FUNCNAME[frame+1]}" "${BASH_SOURCE[frame+1]}" "${BASH_LINENO[frame]}"
-    fi
+    #fi
   done
 }
 
@@ -52,82 +52,6 @@
   # Exit with failure.
   exit 1
 }
-
-##
-# Default 'Class' all other classes automatically extend from.
-@class::Class() {
-
-  ##
-  # Standard attribute getter.
-  @method::get() {
-    @__attribute_get "$1"
-  }
-
-  ##
-  # Standard attribute setter.
-  @method::set() {
-    @__attribute_set "$1" "$2"
-  }
-
-  ##
-  # Default toString method.
-  @method::toString() {
-    echo "${__OBJECT}"
-  }
-
-  ##
-  # Default destructor.
-  @method::destruct() {
-    @__destruct
-  }
-
-  ##
-  # Standard clone method.
-  @method::clone() {
-    @__clone "$3"
-  }
-
-}
-
-##
-# Default 'Exception'.
-@class::Exception() {
-
-  # Error message attribute.
-  @public message
-
-  # The saved callstack.
-  @public callStack
-
-  ##
-  # Default parameter setter.
-  @method::setParameters() {
-    $this set message "$1"
-  }
-
-  ##
-  # Default toString method.
-  @method::toString() {
-    local message=$($this get message)
-    echo "${__CLASS}: $message"
-  }
-
-  ##
-  # Prints the exceptions callstack.
-  @method::printStack() {
-    $this toString
-    $this get callStack
-  }
-
-}
-
-# Default exceptions.
-@class::IllegalArgumentException@extends::Exception() { :; }
-@class::UnknownLibraryException@extends::Exception() { :; }
-@class::UndefinedMethodException@extends::Exception() { :; }
-@class::UndefinedClassException@extends::Exception() { :; }
-@class::UndefinedAttributeException@extends::Exception() { :; }
-@class::ShellErrorException@extends::Exception() { :; }
 
 # Frame stack array.
 # Contains object references in called order.
@@ -145,54 +69,63 @@ declare -g -A __OOE_EXCEPTION_HANDLERS=(
 )
 
 # default code to run at the end of the ERR trap
-__OOE_OLD_TRAP="exit 1"
+declare -g -- __OOE_OLD_TRAP="exit 1"
 # override it if some ERR trap already exists
 if [[ "$(trap -p ERR)" == "trap"* ]] ; then
   __OOE_OLD_TRAP="$(trap -p ERR)"
-  # strip `^trap -- '`
+  # strip leading `^trap -- '`
   __OOE_OLD_TRAP="${__OOE_OLD_TRAP#*\'}"
-  # strip `' ERR$`
+  # strip trailing `' ERR$`
   __OOE_OLD_TRAP="${__OOE_OLD_TRAP%\'*}"
 fi
+readonly __OOE_OLD_TRAP
 
+## ERR trap handler
 @__err_trap() {
   local status="${1}"
   >&2 echo "@throw ShellErrorException:"
   >&2 echo "  Command \`${BASH_COMMAND}\` exited with a non-zero status (${status})"
   >&2 @__call_stack
 
+  # execute the old trap
   eval "${__OOE_OLD_TRAP}"
 }
 
+# install the ERR trap handler
 trap "@__err_trap \$?" ERR
+
+###
+### Error handling
+### -------------------
 
 @__internal_throw() {
     local class="$1"
     local msg="$2"
 
-    >&2 printf '@internal_thow %s: %s\n' \
-        "${class}" "${msg}"
+    >&2 printf '@internal_throw `%s`: `%s`\n' \
+                            "${class}" "${msg}"
     >&2 @__call_stack
 }
 
 ##
-# Executes the @try() block and manage exception handlers.
+# Executes the @try() block and manages exception handlers.
 #
 # @param $1
-#  Name of the exception class to catch.
+#   Name of the exception class to catch.
 # @param $2
-#  The exception handler function to pass the exception to.
+#   The exception handler function to pass the exception to.
+##
 @catch() {
   local class="${1}"
   local handler="${2}"
 
   if @__func_exists @try ; then
     # Save previous handler for this exception.
-    local old_handler="${__OOE_EXCEPTION_HANDLERS["${class}"]}"
+    local -r -- old_handler="${__OOE_EXCEPTION_HANDLERS["${class}"]}"
     # Set new handler.
     __OOE_EXCEPTION_HANDLERS["${class}"]="${handler}"
 
-    # Try the @try block.
+    # Execute the @try block.
     @try
 
     # Restore previous handler for this exception.
@@ -209,47 +142,55 @@ trap "@__err_trap \$?" ERR
 # Throws the given exception and calls the current handler.
 #
 # @param $1
-#  Name of the exception class to throw.
+#   Name of the exception class to throw.
 @throw() {
-  local exception_class=$1
+  local -r -- exception_class="${1}"
   shift 1
 
   # Create and fill exception.
-  local exception=$(@new $exception_class)
-  $exception set callStack "$(@__call_stack)"
-  $exception setParameters "$@"
+  local exception
+  @new ${exception_class} exception
+  ${exception} set callStack "$(@__call_stack)"
+  ${exception} setParameters "$@"
 
   # Call the responsible handler.
-  local handler=${__OOE_EXCEPTION_HANDLERS["$exception_class"]}
+  local -r -- handler="${__OOE_EXCEPTION_HANDLERS["${exception_class}"]}"
   if [[ -n $handler ]] ; then
-    $handler "$exception"
+    ${handler} ${exception}
+
+  # fall back to the default exception handler if no special was registered
   else
-    ${__OOE_EXCEPTION_HANDLERS['Exception']} "$exception"
+    ${__OOE_EXCEPTION_HANDLERS['Exception']} "${exception}"
   fi
 }
 
+###
+### Libraries
+### ----------
 
 ##
 # Adds a path as library source.
 @add() {
-  __OOE_SOURCES=("$1" ${__OOE_SOURCES[@]})
+  foo bar # FIXME: not implemented
+  __OOE_SOURCES=( "${1}" "${__OOE_SOURCES[@]}" )
 }
 
 ##
 # Imports a given library.
 #
 # @param $1
-#  The library name to import.
-#  A simple "Name" will be included with Name/Name.
-#  A sublibrary "Name/SubName" will be included with Name/SubName.
+#   The library name to import.
+#   A simple "Name" will be included with Name/Name.
+#   A sublibrary "Name/SubName" will be included with Name/SubName.
 @import() {
+  foo bar # FIXME: not implemented
   local sourcepath=
   local dirname=$(dirname $1)
   local basename=$(basename $1)
   if [[ $dirname == "." ]] ; then
     dirname=${base}name
   fi
-  for sourcepath in ${__OOE_SOURCES[@]} ; do
+  for sourcepath in "${__OOE_SOURCES[@]}" ; do
     if [[ -f "$sourcepath/$dirname/${base}name" ]] ; then
       source "$sourcepath/$dirname/${base}name"
       return 0
@@ -260,28 +201,58 @@ trap "@__err_trap \$?" ERR
   exit 1
 }
 
+###
+### Object creation
+### ----------------
 
 ##
 # Returns a callable, new object reference.
 #
 # @param $1
-#  The Class name to construct the object of.
+#   The Class name to construct the object of.
+# @param $2
+#   The name of the variable holding the object (optional).
+#   If not specified, the references is printed on stdout, so then you have
+#   to do something like this:
+#
+#     object=$(@new MyClass)
+#
+#   instead of:
+#
+#     @new MyClass object
 @new() {
-  local class=${1}
-  echo "@__call ${class} ${RANDOM}${SECONDS}${RANDOM}"
+  local -r -- class="${1}" var="${2}"
+
+  # TODO: check class exists
+
+  local object_id="${SECONDS}$(( RANDOM * RANDOM ))"
+  object_id="${object_id//-}" # make it always signed
+
+  local -r -- callable="@__call ${class} ${object_id}"
+
+  if [[ -n "${var}" ]] ; then
+    local -n var_ref="${var}"
+    var_ref="${callable}"
+  else
+    echo "${callable}"
+  fi
 }
+
+###
+### Calls
+### ------
 
 ##
 # Calls a method of an object.
 #
 # @param $1
-#  The methods Class.
+#   The methods Class.
 # @param $2
-#  The object reference.
+#   The object reference.
 # @param $3
-#  The methods name.
+#   The methods name.
 @__call() {
-  local class="$1" object="$2" method="$3"
+  local -r -- class="${1}" object="${2}" method="${3}"
   shift 3
 
   # Save frame to stack.
@@ -291,7 +262,7 @@ trap "@__err_trap \$?" ERR
   @__enter ${class} ${object}
 
   # Call the method.
-  local func="@method::${method}"
+  local func="@method:${method}"
   if @__func_exists "${func}" ; then
     "${func}" "$@"
   else
@@ -307,6 +278,37 @@ trap "@__err_trap \$?" ERR
 }
 
 ##
+# Handles inner calls through $this.
+#
+# @param $1
+#  The methods name.
+@__inner_call() {
+  local method="${1}"
+  shift 1
+
+  # this var toggles private/public permissions
+  local __INNERCALL=true
+
+  local func
+  ## Public function call.
+  func="@method:${method}"
+  if @__func_exists "${func}" ; then
+    "${func}" "$@"
+    return $?
+  }
+
+  ## Private function call.
+  func="@__method:${method}"
+  if @__func_exists "${func}" ; then
+    "${func}" "$@"
+    return $?
+  }
+
+  @__internal_throw UndefinedMethodException "Method '${method}' of class '${class}' not defined."
+  exit 1
+}
+
+##
 # Handles inner parent calls through $parent.
 #
 # @param $1
@@ -316,9 +318,7 @@ trap "@__err_trap \$?" ERR
 # @param $3
 #  The methods name.
 @__parent_call() {
-  local base=$1
-  local object=$2
-  local method=$3
+  local base=$1 object=$2 method=$3
   shift 3
 
   # Save frame to stack.
@@ -337,29 +337,39 @@ trap "@__err_trap \$?" ERR
   @__frame_pop
 }
 
+###
+### Framing
+### --------
+
 ##
-# Handles inner calls through $this.
-#
-# @param $1
-#  The methods name.
-@__inner_call() {
-  local method=$1
-  shift 1
-
-  # this var toggles private/public permissions
-  local __INNERCALL=true
-
-  if @__func_exists "@method::${method}"; then
-    # Public function call.
-    @method::${method} "$@"
-  elif @__func_exists "@__method::${method}"; then
-    # Private function call.
-    @__method::${method} "$@"
-  else
-    @__internal_throw UndefinedMethodException "Method '${method}' of class '${class}' not defined."
-    exit 1
+# Saves the current frame to stack.
+@__frame_push() {
+  if [[ -n ${__CLASS} ]] ; then
+    declare -i i=${#__OOE_FRAME_STACK[@]}
+    # Push frame to stack.
+    __OOE_FRAME_STACK[i]="@__enter ${__CLASS} ${__OBJECT}"
+    # Leave current object.
+    @__leave
   fi
 }
+
+##
+# Reenters the pervious frame from stack.
+@__frame_pop() {
+  declare -i i=${#__OOE_FRAME_STACK[@]}
+  if (( i > 0 )) ; then
+    # bash arrays are indexed from zero
+    (( i-- ))
+    # Reenter previous object.
+    ${__OOE_FRAME_STACK[i]}
+    # Pop the frame out of the stack
+    unset __OOE_FRAME_STACK[i]
+  fi
+}
+
+###
+### Object enter/leave
+### -------------------
 
 ##
 # Enters (sets up methods and attributes of) an object.
@@ -386,9 +396,9 @@ trap "@__err_trap \$?" ERR
   @public()   { @__attribute_init "$1"  "public"  "$2"; }
 
   # Get the base class.
-  local extends_func=( $(@__get_funcs "@class::${__CLASS}@extends::*") )
+  local extends_func=( $(@__get_funcs "@class:${__CLASS}@extends:*") )
   # TODO: (( ${#extends_func[@]} > 1 )) && error
-  __BASE="${extends_func#*@extends::}"
+  __BASE="${extends_func#*@extends:}"
 
   # All base classes automatically extend from 'Class'.
   #@__resolve "class" "Class"
@@ -411,6 +421,22 @@ trap "@__err_trap \$?" ERR
 }
 
 ##
+# Leaves an entered class
+@__leave() {
+  # Remove methods.
+  unset -f $(@__get_funcs "@method:*")
+
+  # Remove inner globals.
+  unset "${__UNSET_VARS_WHEN_LEAVING[@]}"
+  unset __UNSET_VARS_WHEN_LEAVING
+  unset this parent
+}
+
+###
+### Object resolver
+### ----------------
+
+##
 # Resolves extensions, decorations of a construct.
 #
 # @param $1
@@ -423,15 +449,15 @@ trap "@__err_trap \$?" ERR
   local type="$1" name="$2" base="$3"
 
   # Get the function.
-  local func="$(@__get_funcs "@${type}::${name}")"
+  local func="$(@__get_funcs "@${type}:${name}")"
   if [[ -z "${func}" ]] ; then
-    func="$(@__get_funcs "@${type}::${name}@extends::*")"
+    func="$(@__get_funcs "@${type}:${name}@extends:*")"
 
     # Get the base.
     if [[ -z ${base} ]] ; then
       # parameter expansion won't work
 #      base=${func:$(( 1 + ${#type} + 2 + ${#name} + 10 ))}
-      base=${func#*@extends::}
+      base=${func#*@extends:}
     fi
   fi
 
@@ -450,19 +476,17 @@ trap "@__err_trap \$?" ERR
   fi
 
   # Search and resolve decorator classes.
-  $(@__get_funcs "@*@decorates::${name}")
+  $(@__get_funcs "@*@decorates:${name}")
 }
 
-##
-# Leaves an entered class
-@__leave() {
-  # Remove methods.
-  unset -f $(@__get_funcs "@method::*")
+###
+### Special object handlers
+### ------------------------
 
-  # Remove inner globals.
-  unset "${__UNSET_VARS_WHEN_LEAVING[@]}"
-  unset __UNSET_VARS_WHEN_LEAVING
-  unset this parent
+##
+# Handles object destruction.
+@__construct() {
+  :
 }
 
 ##
@@ -495,35 +519,9 @@ trap "@__err_trap \$?" ERR
   done
 }
 
-@__in_class() {
-  [[ -n ${__CLASS} ]]
-}
-
-##
-# Saves the current frame to stack.
-@__frame_push() {
-  if @__in_class ; then
-    declare -i i=${#__OOE_FRAME_STACK[@]}
-    # Push frame to stack.
-    __OOE_FRAME_STACK[i]="@__enter ${__CLASS} ${__OBJECT}"
-    # Leave current object.
-    @__leave
-  fi
-}
-
-##
-# Reenters the pervious frame from stack.
-@__frame_pop() {
-  declare -i i=${#__OOE_FRAME_STACK[@]}
-  if (( i > 0 )) ; then
-    # Get frame from stack.
-    (( i-- ))
-    # Reenter previous object.
-    ${__OOE_FRAME_STACK[i]}
-    # Pop the frame out of the stack
-    unset __OOE_FRAME_STACK[i]
-  fi
-}
+###
+### Attributes
+### -----------
 
 ##
 # Initializes an attribute.
@@ -559,20 +557,26 @@ trap "@__err_trap \$?" ERR
 # @param $2
 #  The value to set.
 @__attribute_set() {
-  local aname="${1}" value="${2}"
+  local -r -- aname="${1}" value="${2}"
+  local -r -- obj="${__OBJECT}"
+  local atype=
 
-  local obj="${__OBJECT}" atype=
-
+  ## check visibilty of the attribute
   if [[ -n ${__OOE_OBJECTS["${obj},${aname},public"]} ]] ; then
     atype="public"
-  elif [[ -n ${__OOE_OBJECTS["${obj},${aname},private"]} && ${__INNERCALL} == true ]] ; then
-    atype="private"
+  elif [[ -n ${__OOE_OBJECTS["${obj},${aname},private"]} ]] ; then
+    if [[ ${__INNERCALL} == true ]] ; then
+      atype="private"
+    else
+      @__internal_throw UndefinedAttributeException "Attribute '${aname}' is private."
+      exit 1
+    fi
   else
     @__internal_throw UndefinedAttributeException "Attribute '${aname}' has unknown type."
     exit 1
   fi
 
-  local key="${__OBJECT},${aname},${atype}"
+  local -r -- key="${obj},${aname},${atype}"
 
   if [[ -n ${atype} ]] ; then
     if [[ -n "${value}" ]] ; then
@@ -614,3 +618,83 @@ trap "@__err_trap \$?" ERR
     printf '%s\n' "${value}"
   fi
 }
+
+###
+### Base classes
+### -------------
+
+##
+# Default 'Class' all other classes automatically extend from.
+@class:Class() {
+
+  ##
+  # Default constructor.
+  @method:__construct() {
+    @__construct
+  }
+
+  ##
+  # Default destructor.
+  @method:__destruct() {
+    @__destruct
+  }
+
+  ##
+  # Standard attribute getter.
+  @method:get() {
+    @__attribute_get "$1"
+  }
+
+  ##
+  # Standard attribute setter.
+  @method:set() {
+    @__attribute_set "$1" "$2"
+  }
+
+  ##
+  # Standard clone method.
+  @method:clone() {
+    @__clone "$3"
+  }
+
+}
+
+##
+# Default 'Exception'.
+@class:Exception() {
+
+  # Error message attribute.
+  @public message
+
+  # The saved callstack.
+  @public callStack
+
+  ##
+  # Default parameter setter.
+  @method:setParameters() {
+    $this set message "$1"
+  }
+
+  ##
+  # Default toString method.
+  @method:toString() {
+    local message=$($this get message)
+    echo "${__CLASS}: $message"
+  }
+
+  ##
+  # Prints the exceptions callstack.
+  @method:printStack() {
+    $this toString
+    $this get callStack
+  }
+
+}
+
+# Default exceptions.
+@class:IllegalArgumentException@extends:Exception() { :; }
+@class:UnknownLibraryException@extends:Exception() { :; }
+@class:UndefinedMethodException@extends:Exception() { :; }
+@class:UndefinedClassException@extends:Exception() { :; }
+@class:UndefinedAttributeException@extends:Exception() { :; }
+@class:ShellErrorException@extends:Exception() { :; }

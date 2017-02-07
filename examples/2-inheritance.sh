@@ -1,3 +1,4 @@
+y
 #!/bin/bash
 
 source ../ooengine || exit 1
@@ -41,7 +42,8 @@ source ../ooengine || exit 1
 
 
 # Create an animal.
-someAnimal=$(@new Animal)
+#someAnimal=$(@new Animal)
+@new Animal someAnimal
 # An animal is able to eat.
 $someAnimal eat
 
